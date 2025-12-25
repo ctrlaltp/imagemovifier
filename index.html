@@ -405,6 +405,7 @@
                 <div class="control-group">
                     <label>画像をほんのりちらつかす</label>
                     <label class="toggle-group">
+                        <span style="font-size: 0.875rem;">無効</span>
                         <input type="checkbox" id="noiseToggle">
                         <div class="toggle-switch"></div>
                         <span style="font-size: 0.875rem;">有効</span>
@@ -580,6 +581,10 @@
             const TOTAL_FRAMES = FPS * DURATION_SEC;
             const BITRATE = 5000000; // 5000kbps
 
+            const SAMPLE_RATE = 44100;
+            const CHANNELS = 2;
+            const AUDIO_BITRATE = 128000;
+
             try {
                 generateBtn.disabled = true;
                 statusMsg.textContent = 'エンコーダを初期化中...';
@@ -591,54 +596,95 @@
                     video: {
                         codec: 'avc',
                         width,
-                        height
+                        height,
+                        frameRate: FPS // Help players identify the framerate
+                    },
+                    audio: {
+                        codec: 'aac',
+                        sampleRate: SAMPLE_RATE,
+                        numberOfChannels: CHANNELS
                     },
                     fastStart: 'fragmented'
                 });
 
-                // 2. Setup VideoEncoder (avc1.640028 = H.264 High Profile, Level 4.0)
-                const encoder = new VideoEncoder({
+                // 2. Setup VideoEncoder
+                const videoEncoder = new VideoEncoder({
                     output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
-                    error: (e) => {
-                        console.error(e);
-                        showError("Encoder error: " + e.message);
-                    }
+                    error: (e) => showError("VideoEncoder error: " + e.message)
                 });
 
-                encoder.configure({
+                videoEncoder.configure({
                     codec: 'avc1.640028',
                     width,
                     height,
                     bitrate: BITRATE,
                     framerate: FPS,
-                    avc: { format: 'annexb' } // mp4-muxer handles conversion if needed, but annexb is safe
+                    avc: { format: 'avc' }
                 });
 
-                // 3. Generate Frames
+                // 3. Setup AudioEncoder
+                const audioEncoder = new AudioEncoder({
+                    output: (chunk, metadata) => muxer.addAudioChunk(chunk, metadata),
+                    error: (e) => showError("AudioEncoder error: " + e.message)
+                });
+
+                audioEncoder.configure({
+                    codec: 'mp4a.40.2', // AAC-LC
+                    numberOfChannels: CHANNELS,
+                    sampleRate: SAMPLE_RATE,
+                    bitrate: AUDIO_BITRATE
+                });
+
+                // 4. Encode Silent Audio (1 second) in chunks
+                // AAC encoders often require smaller chunks (e.g., 1024 or 2048 samples)
+                const CHUNK_SIZE = 2048;
+                const totalSamples = SAMPLE_RATE;
+                let processedSamples = 0;
+
+                while (processedSamples < totalSamples) {
+                    const remaining = totalSamples - processedSamples;
+                    const count = Math.min(CHUNK_SIZE, remaining);
+                    const audioBuffer = new Float32Array(count * CHANNELS); // Silence is 0
+
+                    const audioData = new AudioData({
+                        format: 'f32', // Interleaved
+                        sampleRate: SAMPLE_RATE,
+                        numberOfFrames: count,
+                        numberOfChannels: CHANNELS,
+                        timestamp: (processedSamples / SAMPLE_RATE) * 1000000,
+                        duration: (count / SAMPLE_RATE) * 1000000,
+                        data: audioBuffer
+                    });
+
+                    audioEncoder.encode(audioData);
+                    audioData.close();
+                    processedSamples += count;
+                }
+
+                // 5. Generate video frames
                 for (let i = 0; i < TOTAL_FRAMES; i++) {
                     const timestamp = (i * 1000000) / FPS;
-
-                    // IMPORTANT: Redraw the scene for every frame to get unique noise
                     renderScene(width, height);
-
-                    // Create VideoFrame from active canvas
-                    const frame = new VideoFrame(previewCanvas, { timestamp });
-
-                    // Encode frame
-                    encoder.encode(frame, { keyFrame: i === 0 });
+                    const frame = new VideoFrame(previewCanvas, {
+                        timestamp,
+                        duration: 1000000 / FPS
+                    });
+                    videoEncoder.encode(frame, { keyFrame: i === 0 });
                     frame.close();
 
                     progressBar.style.width = `${((i + 1) / TOTAL_FRAMES) * 100}%`;
-                    statusMsg.textContent = `Encoding frame ${i + 1}/${TOTAL_FRAMES}...`;
-
-                    // Allow UI to breathe
+                    statusMsg.textContent = `変換中... ${i + 1}/${TOTAL_FRAMES}`;
                     await new Promise(r => setTimeout(r, 0));
                 }
 
-                await encoder.flush();
+                await Promise.all([
+                    videoEncoder.flush(),
+                    audioEncoder.flush()
+                ]);
+
                 muxer.finalize();
 
-                // 4. Download
+                // 6. Download
                 const { buffer } = muxer.target;
                 const blob = new Blob([buffer], { type: 'video/mp4' });
                 const url = URL.createObjectURL(blob);
@@ -668,4 +714,5 @@
 
 
 </html>
+
 
