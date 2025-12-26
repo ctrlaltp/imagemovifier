@@ -72,6 +72,7 @@
 
         .canvas-container {
             width: 100%;
+            min-height: 300px;
             max-height: 50vh;
             /* Removed aspect-ratio, now set via JS */
             display: flex;
@@ -363,29 +364,29 @@
         <div class="controls-section">
             <div class="header">
                 <h1>画像をmp4にするやつ</h1>
-                <p style="font-size: 0.8125rem; color: var(--text-secondary);">画像をWebCodecで1秒15fpsのmp4に変換して保存する
-                <br>Firefoxでは動かない可能性ある、ChromeかEdge推奨</p>
+                <p style="font-size: 0.8125rem; color: var(--text-secondary);">
+                    WebCodecを使ってブラウザ内で1秒15fpsのmp4にエンコード
+                    <br>Firefoxだと動かないかも Chrome推奨
+                </p>
             </div>
 
             <div class="control-group">
-                <label>解像度 / 縦横比</label>
+                <label>解像度(16px単位で端数切り下げ)</label>
                 <div class="radio-group" id="resGroup">
-                    <input type="radio" name="res" id="r1" value="1280x720" checked>
+                    <input type="radio" name="res" id="r1" value="original">
                     <label for="r1">
-                        <span>よこ 16:9</span>
-                        1280 x 720
+                        <span>元の解像度</span>
+                        元画像の解像度で処理
                     </label>
-
-                    <input type="radio" name="res" id="r2" value="720x720">
+                    <input type="radio" name="res" id="r2" value="1280" checked>
                     <label for="r2">
-                        <span>1:1</span>
-                        720 x 720
+                        <span>1280pxに制限</span>
+                        最大1280x1280px
                     </label>
-
-                    <input type="radio" name="res" id="r3" value="720x1280">
+                    <input type="radio" name="res" id="r3" value="720">
                     <label for="r3">
-                        <span>9:16 たて</span>
-                        720 x 1280
+                        <span>720pxに制限</span>
+                        最大720x720px
                     </label>
                 </div>
             </div>
@@ -438,7 +439,7 @@
 
     <script type="module">
         import { Muxer, ArrayBufferTarget } from 'https://unpkg.com/mp4-muxer@4.0.1/build/mp4-muxer.mjs';
-    
+
         // --- Constants for User Tuning ---
         const NOISE_INTENSITY = 30; // Change this value to adjust noise strength (0-255)
 
@@ -501,28 +502,48 @@
             reader.readAsDataURL(file);
         }
 
-        function getSelectedResolution() {
+        function getSelectedMode() {
             const checked = document.querySelector('input[name="res"]:checked');
-            return checked ? checked.value : "1280x720";
+            return checked ? checked.value : "original";
         }
 
         function updateCanvasSize() {
-            const resValue = getSelectedResolution();
-            const [w, h] = resValue.split('x').map(Number);
+            if (!sourceImage) return;
 
-            // Update container aspect ratio
-            dropZone.style.aspectRatio = `${w} / ${h}`;
+            const mode = getSelectedMode();
+            let targetW = sourceImage.width;
+            let targetH = sourceImage.height;
 
-            previewCanvas.width = w;
-            previewCanvas.height = h;
+            if (mode !== "original") {
+                const limit = parseInt(mode);
+                const longEdge = Math.max(sourceImage.width, sourceImage.height);
+                if (longEdge > limit) {
+                    const scale = limit / longEdge;
+                    targetW = sourceImage.width * scale;
+                    targetH = sourceImage.height * scale;
+                }
+            }
 
-            renderScene(w, h);
+            // Enforce 16-pixel increments for encoder compatibility
+            const finalW = Math.floor(targetW / 16) * 16;
+            const finalH = Math.floor(targetH / 16) * 16;
+
+            // Update container aspect ratio (for UI look)
+            dropZone.style.aspectRatio = `${finalW} / ${finalH}`;
+
+            previewCanvas.width = finalW;
+            previewCanvas.height = finalH;
+
+            renderScene(finalW, finalH);
         }
 
         function renderScene(w, h) {
             if (!sourceImage) return;
 
-            // 1. Draw image maintaining aspect ratio (cover)
+            // Draw image covering the 16px-aligned canvas
+            // Since we're usually scaling DOWN and then FLOORING to 16px, 
+            // the scale should probably be based on the un-floored target or slightly more to avoid gaps.
+            // Using 'cover' logic is safest.
             const scale = Math.max(w / sourceImage.width, h / sourceImage.height);
             const x = (w - sourceImage.width * scale) / 2;
             const y = (h - sourceImage.height * scale) / 2;
@@ -576,12 +597,12 @@
         }
 
         async function generateVideo() {
-            const resValue = getSelectedResolution();
-            const [width, height] = resValue.split('x').map(Number);
-            const FPS = 15;
+            const width = previewCanvas.width;
+            const height = previewCanvas.height;
+            const FPS = 30;
             const DURATION_SEC = 1;
             const TOTAL_FRAMES = FPS * DURATION_SEC;
-            const BITRATE = 5000000; // 5000kbps
+            const BITRATE = 2000000; // 2000kbps
 
             const SAMPLE_RATE = 44100;
             const CHANNELS = 2;
@@ -714,10 +735,4 @@
     </script>
 </body>
 
-
 </html>
-
-
-
-
-
