@@ -36,6 +36,10 @@
                 radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
                 radial-gradient(circle at 80% 80%, rgba(147, 51, 234, 0.05) 0%, transparent 40%);
         }
+        
+        a:link {
+            color: var(--text-secondary);
+        }
 
         .container {
             width: 100%;
@@ -70,29 +74,127 @@
             gap: 20px;
         }
 
+        .drop-zone {
+            width: 100%;
+            min-height: 150px;
+            border: 2px dashed var(--glass-border);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+            position: relative;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.02);
+            cursor: pointer;
+        }
+
+        .drop-zone:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .drop-zone.dragover {
+            border-color: var(--accent-color);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .thumbnail-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            width: 100%;
+        }
+
+        @media (max-width: 480px) {
+            .thumbnail-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .thumbnail-wrapper {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--glass-border);
+            background: rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .thumbnail-wrapper:hover {
+            transform: scale(1.05);
+            border-color: var(--accent-color);
+        }
+
+        .thumbnail-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .thumbnail-remove-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            line-height: 1;
+            transition: background 0.2s, transform 0.2s;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .thumbnail-remove-btn:hover {
+            background: rgb(220, 38, 38);
+            transform: scale(1.1);
+        }
+
+        .thumbnail-badge {
+            position: absolute;
+            bottom: 4px;
+            left: 4px;
+            background: rgba(0, 0, 0, 0.65);
+            color: var(--text-primary);
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(4px);
+        }
+
         .canvas-container {
             width: 100%;
             min-height: 300px;
             max-height: 50vh;
-            /* Removed aspect-ratio, now set via JS */
             display: flex;
             justify-content: center;
             align-items: center;
             overflow: hidden;
             position: relative;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .canvas-container.dragover {
-            border-color: var(--accent-color);
-            background: rgba(59, 130, 246, 0.05);
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
         }
 
         canvas {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
-            display: none;
         }
 
         .placeholder-text {
@@ -271,7 +373,8 @@
             display: none;
         }
 
-        input[type="text"] {
+        input[type="text"],
+        input[type="number"] {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--glass-border);
             color: var(--text-primary);
@@ -282,7 +385,8 @@
             transition: all 0.2s;
         }
 
-        input[type="text"]:focus {
+        input[type="text"]:focus,
+        input[type="number"]:focus {
             border-color: var(--accent-color);
             background: rgba(255, 255, 255, 0.08);
         }
@@ -341,13 +445,18 @@
 <body>
     <div class="container">
         <div class="preview-section">
-            <div class="canvas-container" id="dropZone">
+            <div class="drop-zone" id="dropZone">
                 <div class="placeholder-text" id="placeholder">
-                    <p>画像をここに投げ込む</p>
+                    <p>画像をここに投げ込む (最大8枚)<br><span style="font-size: 0.8rem; color: var(--text-secondary);">またはクリックして選択</span></p>
                 </div>
+                <div class="thumbnail-grid" id="thumbnailGrid" style="display: none;"></div>
+            </div>
+
+            <div class="canvas-container" id="canvasContainer" style="display: none;">
                 <canvas id="previewCanvas"></canvas>
                 <div class="progress-bar" id="progressBar"></div>
             </div>
+
             <div class="status-msg" id="statusMsg"></div>
         </div>
 
@@ -365,18 +474,18 @@
             <div class="header">
                 <h1>画像をmp4にするやつ</h1>
                 <p style="font-size: 0.8125rem; color: var(--text-secondary);">
-                    WebCodecを使ってブラウザ内で1秒15fpsのmp4にエンコード
-                    <br>Firefoxだと動かないかも Chrome推奨
+                    <a href=https://unpkg.com/mp4-muxer@4.0.1/build/mp4-muxer.mjs>mp4-muxer.mjs</a>を読み込んでブラウザ内でmp4に変換します
+                    <br>Firefoxだと動かないかも Chrome/Edge推奨
                 </p>
             </div>
 
             <div class="control-group">
-                <label>解像度(16px単位で端数切り下げ)</label>
+                <label>解像度<br><small>16px単位で端数切り下げ・画像1枚目で計算</small></label>
                 <div class="radio-group" id="resGroup">
                     <input type="radio" name="res" id="r1" value="original">
                     <label for="r1">
                         <span>元の解像度</span>
-                        (16px単位で切り下げて採用)
+                        でかいとエラー出る
                     </label>
                     <input type="radio" name="res" id="r2" value="1280" checked>
                     <label for="r2">
@@ -406,14 +515,19 @@
                     <input type="text" id="overlayText" placeholder="空欄で無効" maxlength="250">
                 </div>
                 <div class="control-group">
-                    <label>画像をほんのりちらつかす</label>
-                    <label class="toggle-group">
-                        <span style="font-size: 0.875rem;">無効</span>
-                        <input type="checkbox" id="noiseToggle">
-                        <div class="toggle-switch"></div>
-                        <span style="font-size: 0.875rem;">有効</span>
-                    </label>
+                    <label for="slideDuration">1枚あたり表示時間 (秒)</label>
+                    <input type="number" id="slideDuration" value="2" min="0.1" max="10.0" step="0.25">
                 </div>
+            </div>
+
+            <div class="control-group">
+                <label>画像をほんのりちらつかす(処理重いです)</label>
+                <label class="toggle-group" style="justify-content: flex-start;">
+                    <span style="font-size: 0.875rem;">無効</span>
+                    <input type="checkbox" id="noiseToggle">
+                    <div class="toggle-switch"></div>
+                    <span style="font-size: 0.875rem;">有効</span>
+                </label>
             </div>
 
             <button class="btn" id="generateBtn" disabled>
@@ -427,13 +541,14 @@
             </button>
 
             <p style="font-size: 0.75rem; color: var(--text-secondary); text-align: center;">
-                H.264 High Profile • 15 FPS • 5000 kbps • YUV 4:2:0<br>
+            
+                H.264 High Profile • 30 FPS • 2000 kbps • YUV 4:2:0<br>
                 made with Antigravity LLM Agent • uses mp4-muxer<br>
             </p>
         </div>
     </div>
 
-    <input type="file" id="fileInput" accept="image/*">
+    <input type="file" id="fileInput" accept="image/*" multiple>
 
     <script src="https://unpkg.com/mp4-muxer@4.0.1/build/mp4-muxer.mjs" type="module"></script>
 
@@ -444,62 +559,180 @@
         const NOISE_INTENSITY = 30; // Change this value to adjust noise strength (0-255)
 
         const dropZone = document.getElementById('dropZone');
+        const thumbnailGrid = document.getElementById('thumbnailGrid');
+        const canvasContainer = document.getElementById('canvasContainer');
         const fileInput = document.getElementById('fileInput');
         const previewCanvas = document.getElementById('previewCanvas');
         const placeholder = document.getElementById('placeholder');
         const resRadios = document.querySelectorAll('input[name="res"]');
         const overlayInput = document.getElementById('overlayText');
         const noiseToggle = document.getElementById('noiseToggle');
+        const slideDurationInput = document.getElementById('slideDuration');
         const generateBtn = document.getElementById('generateBtn');
         const statusMsg = document.getElementById('statusMsg');
         const progressBar = document.getElementById('progressBar');
         const ctx = previewCanvas.getContext('2d', { alpha: false });
 
-        let sourceImage = null;
+        let loadedImages = [];
+        let previewAnimationId = null;
+        let previewStartTime = null;
 
         // --- Event Listeners ---
         fileInput.addEventListener('change', handleFileSelect);
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        
+        dropZone.addEventListener('dragover', (e) => { 
+            e.preventDefault(); 
+            dropZone.classList.add('dragover'); 
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
         dropZone.addEventListener('drop', handleDrop);
+        
+        dropZone.addEventListener('click', (e) => {
+            if (e.target.closest('.thumbnail-wrapper')) {
+                return;
+            }
+            fileInput.click();
+        });
+
         resRadios.forEach(r => r.addEventListener('change', updateCanvasSize));
         overlayInput.addEventListener('input', updateCanvasSize);
         noiseToggle.addEventListener('change', updateCanvasSize);
+        
+        slideDurationInput.addEventListener('input', () => {
+            previewStartTime = performance.now();
+            updateCanvasSize();
+        });
+        
         generateBtn.addEventListener('click', generateVideo);
-
-        // Initial aspect ratio setup
-        updateCanvasSize();
 
         function handleDrop(e) {
             e.preventDefault();
             dropZone.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
-                processImage(file);
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                processImages(files);
             }
         }
 
         function handleFileSelect(e) {
-            const file = e.target.files[0];
-            if (file) processImage(file);
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                processImages(files);
+            }
         }
 
-        function processImage(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    sourceImage = img;
-                    updateCanvasSize();
-                    placeholder.style.display = 'none';
-                    previewCanvas.style.display = 'block';
-                    generateBtn.disabled = false;
-                    statusMsg.textContent = '画像を読み込みました。';
-                    statusMsg.className = 'status-msg success';
+        async function processImages(files) {
+            const remainingSpace = 8 - loadedImages.length;
+            if (remainingSpace <= 0) {
+                showError("Maximum of 8 images already reached.");
+                return;
+            }
+            
+            const filesToProcess = Array.from(files)
+                .filter(file => file.type.startsWith('image/'))
+                .slice(0, remainingSpace);
+                
+            if (filesToProcess.length === 0) return;
+            
+            statusMsg.textContent = 'Loading images...';
+            statusMsg.className = 'status-msg';
+            
+            const loadPromises = filesToProcess.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            resolve({
+                                id: Math.random().toString(36).substr(2, 9),
+                                img,
+                                name: file.name
+                            });
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+            });
+            
+            try {
+                const newImages = await Promise.all(loadPromises);
+                loadedImages = [...loadedImages, ...newImages];
+                onImagesUpdated();
+                fileInput.value = '';
+            } catch (err) {
+                showError("Error loading some images.");
+            }
+        }
+
+        function onImagesUpdated() {
+            const N = loadedImages.length;
+            if (N > 0) {
+                placeholder.style.display = 'none';
+                thumbnailGrid.style.display = 'grid';
+                canvasContainer.style.display = 'flex';
+                generateBtn.disabled = false;
+                
+                statusMsg.textContent = `${N} image(s) loaded.`;
+                statusMsg.className = 'status-msg success';
+                
+                renderThumbnails();
+                updateCanvasSize();
+                startPreviewLoop();
+            } else {
+                placeholder.style.display = 'block';
+                thumbnailGrid.style.display = 'none';
+                canvasContainer.style.display = 'none';
+                generateBtn.disabled = true;
+                
+                statusMsg.textContent = '---';
+                statusMsg.className = 'status-msg';
+                
+                stopPreviewLoop();
+            }
+        }
+
+        function renderThumbnails() {
+            thumbnailGrid.innerHTML = '';
+            loadedImages.forEach((item, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'thumbnail-wrapper';
+                if (index === 0) {
+                    wrapper.style.borderColor = 'var(--accent-color)';
+                    wrapper.style.boxShadow = '0 0 10px rgba(59, 130, 246, 0.4)';
+                }
+                
+                const imgEl = document.createElement('img');
+                imgEl.src = item.img.src;
+                imgEl.className = 'thumbnail-img';
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'thumbnail-remove-btn';
+                removeBtn.innerHTML = '&times;';
+                removeBtn.title = 'Remove image';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removeImage(item.id);
                 };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+                
+                const badge = document.createElement('div');
+                badge.className = 'thumbnail-badge';
+                badge.textContent = index === 0 ? 'REF' : `#${index + 1}`;
+                
+                wrapper.appendChild(imgEl);
+                wrapper.appendChild(removeBtn);
+                wrapper.appendChild(badge);
+                thumbnailGrid.appendChild(wrapper);
+            });
+        }
+
+        function removeImage(id) {
+            loadedImages = loadedImages.filter(item => item.id !== id);
+            onImagesUpdated();
         }
 
         function getSelectedMode() {
@@ -508,19 +741,20 @@
         }
 
         function updateCanvasSize() {
-            if (!sourceImage) return;
+            if (loadedImages.length === 0) return;
 
+            const refImage = loadedImages[0].img;
             const mode = getSelectedMode();
-            let targetW = sourceImage.width;
-            let targetH = sourceImage.height;
+            let targetW = refImage.width;
+            let targetH = refImage.height;
 
             if (mode !== "original") {
                 const limit = parseInt(mode);
-                const longEdge = Math.max(sourceImage.width, sourceImage.height);
+                const longEdge = Math.max(refImage.width, refImage.height);
                 if (longEdge > limit) {
                     const scale = limit / longEdge;
-                    targetW = sourceImage.width * scale;
-                    targetH = sourceImage.height * scale;
+                    targetW = refImage.width * scale;
+                    targetH = refImage.height * scale;
                 }
             }
 
@@ -528,36 +762,107 @@
             const finalW = Math.floor(targetW / 16) * 16;
             const finalH = Math.floor(targetH / 16) * 16;
 
-            // Update container aspect ratio (for UI look)
-            dropZone.style.aspectRatio = `${finalW} / ${finalH}`;
+            canvasContainer.style.aspectRatio = `${finalW} / ${finalH}`;
 
             previewCanvas.width = finalW;
             previewCanvas.height = finalH;
 
-            renderScene(finalW, finalH);
+            if (!previewAnimationId) {
+                renderSceneAtTime(0, finalW, finalH);
+            }
         }
 
-        function renderScene(w, h) {
-            if (!sourceImage) return;
+        function drawSingleImage(img, offsetX, w, h) {
+            const scale = Math.max(w / img.width, h / img.height);
+            const imgW = img.width * scale;
+            const imgH = img.height * scale;
+            const x = offsetX + (w - imgW) / 2;
+            const y = (h - imgH) / 2;
 
-            // Draw image covering the 16px-aligned canvas
-            // Since we're usually scaling DOWN and then FLOORING to 16px, 
-            // the scale should probably be based on the un-floored target or slightly more to avoid gaps.
-            // Using 'cover' logic is safest.
-            const scale = Math.max(w / sourceImage.width, h / sourceImage.height);
-            const x = (w - sourceImage.width * scale) / 2;
-            const y = (h - sourceImage.height * scale) / 2;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(offsetX, 0, w, h);
+            ctx.clip();
+            ctx.drawImage(img, x, y, imgW, imgH);
+            ctx.restore();
+        }
+
+        function getSlideshowState(t) {
+            const S = parseFloat(slideDurationInput.value) || 2.0;
+            const T = 0.25; // Swipe transition duration
+            const N = loadedImages.length;
+            
+            if (N === 0) return null;
+            if (N === 1) {
+                return {
+                    type: 'static',
+                    img1: loadedImages[0].img,
+                    progress: 0
+                };
+            }
+            
+            const cycle = S + T;
+            let index = Math.floor(t / cycle);
+            
+            if (index >= N) {
+                index = N - 1;
+            }
+            
+            const timeInCycle = t - index * cycle;
+            if (timeInCycle < S) {
+                return {
+                    type: 'static',
+                    img1: loadedImages[index].img,
+                    progress: 0
+                };
+            } else {
+                const progress = Math.min(1, (timeInCycle - S) / T);
+                return {
+                    type: 'transition',
+                    img1: loadedImages[index].img,
+                    img2: loadedImages[(index + 1) % N].img,
+                    progress: progress
+                };
+            }
+        }
+
+        function renderSceneAtTime(t, w, h) {
+            const state = getSlideshowState(t);
+            if (!state) return;
 
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, w, h);
-            ctx.drawImage(sourceImage, x, y, sourceImage.width * scale, sourceImage.height * scale);
 
-            // 2. Apply Noise
+            if (state.type === 'static') {
+                drawSingleImage(state.img1, 0, w, h);
+            } else if (state.type === 'transition') {
+                // 1. Get the linear progress (0 to 1)
+                const p = state.progress; 
+                
+                // 2. Apply easeInOutExpo easing
+                let easedProgress;
+                    if (p === 0) {
+                        easedProgress = 0;
+                    } else if (p === 1) {
+                        easedProgress = 1;
+                    } else if (p < 0.5) {
+                        easedProgress = Math.pow(2, 20 * p - 10) / 2;
+                    } else {
+                        easedProgress = (2 - Math.pow(2, -20 * p + 10)) / 2;
+                    }
+
+                // 3. Use the eased progress to calculate offsets
+                const offset1 = -easedProgress * w;
+                const offset2 = (1 - easedProgress) * w;
+
+                drawSingleImage(state.img1, offset1, w, h);
+                drawSingleImage(state.img2, offset2, w, h);
+            }
+
             if (noiseToggle.checked) {
                 applyNoise(w, h);
             }
 
-            // 3. Draw Text Overlay
             const text = overlayInput.value.trim();
             if (text) {
                 drawOverlayText(text, w, h);
@@ -582,27 +887,67 @@
         function drawOverlayText(text, w, h) {
             const padding = w * 0.05;
             const fontSize = Math.max(20, h * 0.04);
-            ctx.font = `700 ${fontSize}px 'Inter', sans-serif`;
+            ctx.font = `500 ${fontSize}px 'Inter', sans-serif`;
             ctx.textAlign = 'right';
             ctx.textBaseline = 'bottom';
 
-            // Stroke (white)
-            ctx.strokeStyle = 'white';
+            ctx.strokeStyle = '#1d2024'; // black-ish
             ctx.lineWidth = fontSize * 0.15;
             ctx.strokeText(text, w - padding, h - padding);
 
-            // Fill (black)
-            ctx.fillStyle = 'black';
+            ctx.fillStyle = '#f4f5f7'; // white-ish
             ctx.fillText(text, w - padding, h - padding);
+        }
+
+        function startPreviewLoop() {
+            if (previewAnimationId) return;
+            previewStartTime = performance.now();
+            tickPreview();
+        }
+
+        function stopPreviewLoop() {
+            if (previewAnimationId) {
+                cancelAnimationFrame(previewAnimationId);
+                previewAnimationId = null;
+            }
+        }
+
+        function tickPreview() {
+            if (loadedImages.length === 0) {
+                stopPreviewLoop();
+                return;
+            }
+
+            const S = parseFloat(slideDurationInput.value) || 2.0;
+            const T = 0.5;
+            const N = loadedImages.length;
+            const totalDuration = N === 1 ? S : N * S + (N - 1) * T;
+
+            const elapsed = (performance.now() - previewStartTime) / 1000;
+            const t = elapsed % totalDuration;
+
+            const width = previewCanvas.width;
+            const height = previewCanvas.height;
+
+            if (width > 0 && height > 0) {
+                renderSceneAtTime(t, width, height);
+            }
+
+            previewAnimationId = requestAnimationFrame(tickPreview);
         }
 
         async function generateVideo() {
             const width = previewCanvas.width;
             const height = previewCanvas.height;
             const FPS = 30;
-            const DURATION_SEC = 1;
-            const TOTAL_FRAMES = FPS * DURATION_SEC;
-            const BITRATE = 2000000; // 2000kbps
+            
+            const S = parseFloat(slideDurationInput.value) || 3.0;
+            const T = 0.5;
+            const N = loadedImages.length;
+            const DURATION_SEC = N === 1 ? S : N * S + (N - 1) * T;
+            
+            const TOTAL_FRAMES = Math.ceil(FPS * DURATION_SEC);
+			const BITRATE = 5000000; // 5Mbps
 
             const SAMPLE_RATE = 44100;
             const CHANNELS = 2;
@@ -610,17 +955,18 @@
 
             try {
                 generateBtn.disabled = true;
-                statusMsg.textContent = 'エンコーダを初期化中...';
+                statusMsg.textContent = 'Initializing encoder...';
                 progressBar.style.width = '0%';
 
-                // 1. Setup Muxer
+                let encodingError = null;
+
                 const muxer = new Muxer({
                     target: new ArrayBufferTarget(),
                     video: {
                         codec: 'avc',
                         width,
                         height,
-                        frameRate: FPS // Help players identify the framerate
+                        frameRate: FPS
                     },
                     audio: {
                         codec: 'aac',
@@ -630,10 +976,12 @@
                     fastStart: 'fragmented'
                 });
 
-                // 2. Setup VideoEncoder
                 const videoEncoder = new VideoEncoder({
                     output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
-                    error: (e) => showError("VideoEncoder error: " + e.message)
+                    error: (e) => {
+                        encodingError = "VideoEncoder error: " + e.message;
+                        showError(encodingError);
+                    }
                 });
 
                 videoEncoder.configure({
@@ -645,10 +993,12 @@
                     avc: { format: 'avc' }
                 });
 
-                // 3. Setup AudioEncoder
                 const audioEncoder = new AudioEncoder({
                     output: (chunk, metadata) => muxer.addAudioChunk(chunk, metadata),
-                    error: (e) => showError("AudioEncoder error: " + e.message)
+                    error: (e) => {
+                        encodingError = "AudioEncoder error: " + e.message;
+                        showError(encodingError);
+                    }
                 });
 
                 audioEncoder.configure({
@@ -658,24 +1008,31 @@
                     bitrate: AUDIO_BITRATE
                 });
 
-                // 4. Encode Silent Audio (1 second) in chunks
-                // AAC encoders often require smaller chunks (e.g., 1024 or 2048 samples)
+                // Wait a short moment to allow async initialization errors to fire
+                await new Promise(r => setTimeout(r, 100));
+                if (encodingError) {
+                    throw new Error(encodingError);
+                }
+
                 const CHUNK_SIZE = 2048;
-                const totalSamples = SAMPLE_RATE;
+                const totalSamples = Math.ceil(SAMPLE_RATE * DURATION_SEC);
                 let processedSamples = 0;
 
                 while (processedSamples < totalSamples) {
+                    if (encodingError) {
+                        throw new Error(encodingError);
+                    }
                     const remaining = totalSamples - processedSamples;
                     const count = Math.min(CHUNK_SIZE, remaining);
                     const audioBuffer = new Float32Array(count * CHANNELS); // Silence is 0
 
                     const audioData = new AudioData({
-                        format: 'f32', // Interleaved
+                        format: 'f32',
                         sampleRate: SAMPLE_RATE,
                         numberOfFrames: count,
                         numberOfChannels: CHANNELS,
-                        timestamp: (processedSamples / SAMPLE_RATE) * 1000000,
-                        duration: (count / SAMPLE_RATE) * 1000000,
+                        timestamp: Math.round((processedSamples / SAMPLE_RATE) * 1000000),
+                        duration: Math.round((count / SAMPLE_RATE) * 1000000),
                         data: audioBuffer
                     });
 
@@ -684,20 +1041,31 @@
                     processedSamples += count;
                 }
 
-                // 5. Generate video frames
                 for (let i = 0; i < TOTAL_FRAMES; i++) {
-                    const timestamp = (i * 1000000) / FPS;
-                    renderScene(width, height);
+                    if (encodingError) {
+                        throw new Error(encodingError);
+                    }
+                    const timestamp = Math.round((i * 1000000) / FPS);
+                    const timeSec = i / FPS;
+                    renderSceneAtTime(timeSec, width, height);
+                    
+                    const state = getSlideshowState(timeSec);
+                    const isStatic = state ? (state.type === 'static') : true;
+
                     const frame = new VideoFrame(previewCanvas, {
                         timestamp,
-                        duration: 1000000 / FPS
+                        duration: Math.round(1000000 / FPS)
                     });
-                    videoEncoder.encode(frame, { keyFrame: i === 0 });
+                    videoEncoder.encode(frame, { keyFrame: isStatic });
                     frame.close();
 
                     progressBar.style.width = `${((i + 1) / TOTAL_FRAMES) * 100}%`;
-                    statusMsg.textContent = `変換中... ${i + 1}/${TOTAL_FRAMES}`;
+                    statusMsg.textContent = `Converting... ${i + 1}/${TOTAL_FRAMES}`;
                     await new Promise(r => setTimeout(r, 0));
+                }
+
+                if (encodingError) {
+                    throw new Error(encodingError);
                 }
 
                 await Promise.all([
@@ -707,7 +1075,6 @@
 
                 muxer.finalize();
 
-                // 6. Download
                 const { buffer } = muxer.target;
                 const blob = new Blob([buffer], { type: 'video/mp4' });
                 const url = URL.createObjectURL(blob);
@@ -717,7 +1084,7 @@
                 a.click();
                 URL.revokeObjectURL(url);
 
-                statusMsg.textContent = 'ファイルを保存しました。';
+                statusMsg.textContent = 'File saved successfully.';
                 statusMsg.className = 'status-msg success';
             } catch (err) {
                 console.error(err);
@@ -729,11 +1096,10 @@
         }
 
         function showError(msg) {
-            statusMsg.textContent = "エラー: " + msg;
+            statusMsg.textContent = "Error: " + msg;
             statusMsg.className = 'status-msg error';
         }
     </script>
 </body>
 
 </html>
-
